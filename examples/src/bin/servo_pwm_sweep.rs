@@ -37,8 +37,8 @@ async fn main(spawner: Spawner){
     let mut servo_motor = ServoBuilder::new(servo_pwm_device)
         .set_servo_freq(50)
         .set_max_degree_rotation(180)
-        .set_min_pulse_width(690)
-        .set_max_pulse_width(2620)
+        .set_min_duty(1800)
+        .set_max_duty(6600)
         .set_initial_position(0)
         .build();
 
@@ -51,7 +51,7 @@ async fn main(spawner: Spawner){
         log::info!("Current Pos {} - Target {}", servo_motor.get_current_pos(), target);
         
         log::info!("Waiting the servo to sweep....");
-        servo_motor.sweep(target, 5).await;
+        servo_motor.sweep(target, 100).await;
         log::info!("Servo Sweep is Complete\n");
         
         if target == 0 {target = 180;}

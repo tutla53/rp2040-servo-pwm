@@ -10,23 +10,22 @@ use {
         SetDutyCycle
     },
     embassy_time::Timer,
-    fixed::{types::extra::U4, FixedU16},
     {defmt_rtt as _, panic_probe as _},
 };
 
 const DEFAULT_SERVO_FREQ: u32 = 50; //Hertz
-const DEFAULT_MIN_PULSE_WIDTH: u32 = 1000; //us 
-const DEFAULT_MAX_PULSE_WIDTH: u32 = 2000;  //us
-const DEFAULT_MAX_DEGREE_ROTATION: u8 = 180; //degree
+const DEFAULT_MIN_DUTY: u16 = 5; //us 
+const DEFAULT_MAX_DUTY: u16 = 10;  //us
+const DEFAULT_MAX_DEGREE_ROTATION: u16 = 180; //degree
 const DEFAULT_INITIAL_POSITION: u16 = 0; //degree
 
 pub struct ServoBuilder<'d> {
     pwm: Pwm<'d>,
     cfg: Config,
     freq: u32, 
-    min_pulse_width: u32,
-    max_pulse_width: u32,
-    max_degree_rotation: u8,
+    min_duty: u16,
+    max_duty: u16,
+    max_degree_rotation: u16,
     initial_position: u16,
 }
 
@@ -36,8 +35,8 @@ impl<'d> ServoBuilder<'d> {
             pwm,
             cfg: Config::default(),
             freq: DEFAULT_SERVO_FREQ,
-            min_pulse_width: DEFAULT_MIN_PULSE_WIDTH,
-            max_pulse_width: DEFAULT_MAX_PULSE_WIDTH,
+            min_duty: DEFAULT_MIN_DUTY,
+            max_duty: DEFAULT_MAX_DUTY,
             max_degree_rotation: DEFAULT_MAX_DEGREE_ROTATION,
             initial_position: DEFAULT_INITIAL_POSITION,
         }
@@ -48,17 +47,17 @@ impl<'d> ServoBuilder<'d> {
         self
     }
 
-    pub fn set_min_pulse_width(mut self, duration: u32) -> Self {
-        self.min_pulse_width = duration;
+    pub fn set_min_duty(mut self, duration: u16) -> Self {
+        self.min_duty = duration;
         self
     }
 
-    pub fn set_max_pulse_width(mut self, duration: u32) -> Self {
-        self.max_pulse_width = duration;
+    pub fn set_max_duty(mut self, duration: u16) -> Self {
+        self.max_duty = duration;
         self
     }
 
-    pub fn set_max_degree_rotation(mut self, degree: u8) -> Self {
+    pub fn set_max_degree_rotation(mut self, degree: u16) -> Self {
         self.max_degree_rotation = degree;
         self
     }
@@ -70,9 +69,8 @@ impl<'d> ServoBuilder<'d> {
 
     pub fn build(mut self) -> Servo<'d> {
         let clock_freq_hz = embassy_rp::clocks::clk_sys_freq();
-        let divider = 125u8;
+        let divider = 50u8;
         let period = (clock_freq_hz / (self.freq * divider as u32)) as u16 - 1;
-        let num = FixedU16::<U4>::from_num(self.max_pulse_width - self.min_pulse_width);
         
         self.cfg.top = period;
         self.cfg.divider = divider.into();
@@ -81,11 +79,11 @@ impl<'d> ServoBuilder<'d> {
         Servo {
             pwm: self.pwm,
             cfg: self.cfg,
-            min_pulse_width: FixedU16::<U4>::from_num(self.min_pulse_width),
-            max_pulse_width: FixedU16::<U4>::from_num(self.max_pulse_width),
-            max_degree_rotation:  FixedU16::<U4>::from_num(self.max_degree_rotation),
+            period: period,
+            min_duty_value: self.min_duty,
+            max_duty_value: self.max_duty,
+            max_degree_rotation:  self.max_degree_rotation,
             current_pos: self.initial_position,
-            numerator: num,
         }
     }
 }
@@ -93,11 +91,11 @@ impl<'d> ServoBuilder<'d> {
 pub struct Servo<'d> {
     pwm: Pwm<'d>,
     cfg: Config,
-    min_pulse_width: FixedU16<U4>,
-    max_pulse_width: FixedU16<U4>,
-    max_degree_rotation: FixedU16<U4>,
+    period: u16,
+    min_duty_value: u16,
+    max_duty_value: u16,
+    max_degree_rotation: u16,
     current_pos: u16,
-    numerator: FixedU16<U4>,
 }
 
 #[allow(dead_code)]
@@ -123,16 +121,14 @@ impl<'d> Servo<'d> {
 
     pub fn rotate(&mut self, degree: u16) {
 
-        let mut duration = ((FixedU16::<U4>::from_num(degree)/self.max_degree_rotation) * self.numerator) + self.min_pulse_width;
+        let mut duty = (((self.max_duty_value - self.min_duty_value) as u32 * degree as u32)/self.max_degree_rotation as u32) + self.min_duty_value as u32;
         
-        if  duration > self.max_pulse_width {
-            duration = self.max_pulse_width;
+        if  duty > self.max_duty_value as u32{
+            duty = self.max_duty_value as u32;
         }
         
-        let duration_int = duration.to_num::<u16>();
-
         self.set_current_pos(degree);
-        self.pwm.set_duty_cycle(duration_int).unwrap();
+        self.pwm.set_duty_cycle(duty as u16).unwrap();
     }
 
     pub async fn sweep(&mut self, target: u16, delay_ms: u64){
