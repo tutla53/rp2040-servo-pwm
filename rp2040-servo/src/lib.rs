@@ -113,6 +113,7 @@ impl<'d> Servo<'d> {
     pub fn enable(&mut self) {
         self.cfg.enable = true;
         self.pwm.set_config(&self.cfg);
+        self.rotate(self.current_pos);
     }
 
     pub fn disable(&mut self) {
