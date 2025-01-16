@@ -9,24 +9,23 @@ use {
         Pwm, 
         SetDutyCycle
     },
-    embassy_time::Timer,
     {defmt_rtt as _, panic_probe as _},
 };
 
 const DEFAULT_SERVO_FREQ: u32 = 50; //Hertz
-const DEFAULT_MIN_DUTY: u16 = 2100; //us 
-const DEFAULT_MAX_DUTY: u16 = 8200;  //us
-const DEFAULT_MAX_DEGREE_ROTATION: u16 = 180; //degree
-const DEFAULT_INITIAL_POSITION: u16 = 0; //degree
+const DEFAULT_MIN_DUTY: u32 = 2100; //us 
+const DEFAULT_MAX_DUTY: u32 = 8200;  //us
+const DEFAULT_MAX_DEGREE_ROTATION: u32 = 180; //degree
+const DEFAULT_INITIAL_POSITION: u32 = 0; //degree
 
 pub struct ServoBuilder<'d> {
     pwm: Pwm<'d>,
     cfg: Config,
     freq: u32, 
-    min_duty: u16,
-    max_duty: u16,
-    max_degree_rotation: u16,
-    initial_position: u16,
+    min_duty: u32,
+    max_duty: u32,
+    max_degree_rotation: u32,
+    initial_position: u32,
 }
 
 impl<'d> ServoBuilder<'d> {
@@ -47,22 +46,22 @@ impl<'d> ServoBuilder<'d> {
         self
     }
 
-    pub fn set_min_duty(mut self, duration: u16) -> Self {
+    pub fn set_min_duty(mut self, duration: u32) -> Self {
         self.min_duty = duration;
         self
     }
 
-    pub fn set_max_duty(mut self, duration: u16) -> Self {
+    pub fn set_max_duty(mut self, duration: u32) -> Self {
         self.max_duty = duration;
         self
     }
 
-    pub fn set_max_degree_rotation(mut self, degree: u16) -> Self {
+    pub fn set_max_degree_rotation(mut self, degree: u32) -> Self {
         self.max_degree_rotation = degree;
         self
     }
 
-    pub fn set_initial_position(mut self, init_pos: u16) -> Self {
+    pub fn set_initial_position(mut self, init_pos: u32) -> Self {
         self.initial_position = init_pos;
         self
     }
@@ -79,9 +78,8 @@ impl<'d> ServoBuilder<'d> {
         Servo {
             pwm: self.pwm,
             cfg: self.cfg,
-            period: period,
-            min_duty_value: self.min_duty,
-            max_duty_value: self.max_duty,
+            min_duty: self.min_duty,
+            max_duty: self.max_duty,
             max_degree_rotation:  self.max_degree_rotation,
             current_pos: self.initial_position,
         }
@@ -91,21 +89,33 @@ impl<'d> ServoBuilder<'d> {
 pub struct Servo<'d> {
     pwm: Pwm<'d>,
     cfg: Config,
-    period: u16,
-    min_duty_value: u16,
-    max_duty_value: u16,
-    max_degree_rotation: u16,
-    current_pos: u16,
+    min_duty: u32,
+    max_duty: u32,
+    max_degree_rotation: u32,
+    current_pos: u32,
 }
 
 #[allow(dead_code)]
 impl<'d> Servo<'d> {
-    fn set_current_pos(&mut self, degree: u16){
+    fn set_current_pos(&mut self, degree: u32){
         self.current_pos = degree;
     }
 
-    pub fn get_current_pos(&mut self) -> u16 {
+    pub fn get_current_pos(&mut self) -> u32 {
         return self.current_pos;
+    }
+
+    pub fn get_min_duty(&mut self) -> u32 {
+        return self.min_duty;
+    }
+
+    pub fn get_max_duty(&mut self) -> u32 {
+        return self.max_duty;
+    }
+
+    pub fn get_current_duty(&mut self) -> u32 {
+        let duty = self.degree_to_duty(self.current_pos);
+        return duty;
     }
 
     pub fn enable(&mut self) {
@@ -119,35 +129,35 @@ impl<'d> Servo<'d> {
         self.pwm.set_config(&self.cfg);
     }
 
-    pub fn rotate(&mut self, degree: u16) {
+    pub fn degree_to_duty(&mut self, degree: u32) -> u32 {
+        let mut duty = (((self.max_duty - self.min_duty) * degree)/self.max_degree_rotation) + self.min_duty;
 
-        let mut duty = (((self.max_duty_value - self.min_duty_value) as u32 * degree as u32)/self.max_degree_rotation as u32) + self.min_duty_value as u32;
-        
-        if  duty > self.max_duty_value as u32{
-            duty = self.max_duty_value as u32;
-        }
+        if  duty > self.max_duty { duty = self.max_duty; }
+        else if duty < self.min_duty{ duty = self.min_duty; }
+
+        return duty;
+    }
+
+    pub fn duty_to_degree(&mut self, duty: u32) -> u32 {
+        let degree = ((duty - self.min_duty) * self.max_degree_rotation)/ (self.max_duty - self.min_duty);
+        return degree;
+    }
+
+    pub fn rotate(&mut self, degree: u32) {
+        let duty = self.degree_to_duty(degree);
         
         self.set_current_pos(degree);
         self.pwm.set_duty_cycle(duty as u16).unwrap();
     }
 
-    pub async fn sweep(&mut self, target: u16, delay_ms: u64){
-        let mut inc: i16 = 1;
-        if self.current_pos > target {inc = -1}
-    
-        while self.current_pos != target {
-            let mut new_pos = self.current_pos as i16 + inc;
-            
-            if new_pos<0 {new_pos = 0;}
-            else if new_pos>180{new_pos = 180;}
-    
-            self.rotate(new_pos as u16);
-            Timer::after_millis(delay_ms).await;
-        }
-    }
+    pub fn rotate_duty(&mut self,mut  duty: u32) {
 
-    fn rotate_duration(&mut self, duration: u16) {
-        self.set_current_pos(duration.into());
-        self.pwm.set_duty_cycle(duration).unwrap();
+        if  duty > self.max_duty { duty = self.max_duty; }
+        else if duty < self.min_duty{ duty = self.min_duty; }
+
+        let current_degree = self.duty_to_degree(duty);
+        self.set_current_pos(current_degree);
+
+        self.pwm.set_duty_cycle(duty as u16).unwrap();
     }
 }
