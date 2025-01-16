@@ -37,8 +37,8 @@ async fn main(spawner: Spawner){
     let mut servo_motor = ServoBuilder::new(servo_pwm_device)
         .set_servo_freq(50)
         .set_max_degree_rotation(180)
-        .set_min_duty(1800)
-        .set_max_duty(6600)
+        .set_min_duty(2100)
+        .set_max_duty(8200)
         .set_initial_position(0)
         .build();
 
