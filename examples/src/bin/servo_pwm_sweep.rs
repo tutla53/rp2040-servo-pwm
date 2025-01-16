@@ -36,27 +36,52 @@ async fn main(spawner: Spawner){
     
     let mut servo_motor = ServoBuilder::new(servo_pwm_device)
         .set_servo_freq(50)
-        .set_max_degree_rotation(180)
+        .set_max_degree_rotation(0)
         .set_min_duty(2100)
         .set_max_duty(8200)
-        .set_initial_position(0)
+        .set_initial_position(180)
         .build();
 
     servo_motor.enable();
     Timer::after_secs(1).await;
-    let mut target: u16 = 0;
+    let mut target: u32 = 0;
+    let inc: u32 = 1;
+    let delay_ms: u64 = 1;
+    let mut current_duty = servo_motor.get_current_duty();
+    let mut target_duty = servo_motor.degree_to_duty(target);
     log::info!("Current Pos: {}", servo_motor.get_current_pos());
 
     loop {
+
+        current_duty = servo_motor.get_current_duty();
+        target_duty = servo_motor.degree_to_duty(target);
         log::info!("Current Pos {} - Target {}", servo_motor.get_current_pos(), target);
+        log::info!("Current Duty {} - Target {}", current_duty, target_duty);
+        
         
         log::info!("Waiting the servo to sweep....");
-        servo_motor.sweep(target, 50).await;
-        log::info!("Servo Sweep is Complete\n");
+        if current_duty > target_duty {
+            while (current_duty > target_duty) && (current_duty >= servo_motor.get_min_duty()) && (current_duty <= servo_motor.get_max_duty()) {
+                servo_motor.rotate_duty(current_duty);
+                current_duty = current_duty - inc;
+                log::info!("Current Duty {} - Target {}", current_duty, target_duty);
+                Timer::after_millis(delay_ms).await;
+            }
+        }
+
+        else if current_duty < target_duty {
+            while (current_duty < target_duty) && (current_duty >= servo_motor.get_min_duty()) && (current_duty <= servo_motor.get_max_duty()) {
+                servo_motor.rotate_duty(current_duty);                
+                current_duty = current_duty + inc;
+                log::info!("Current Duty {} - Target {}", current_duty, target_duty);
+                Timer::after_millis(delay_ms).await;
+            }
+        }
         
+        log::info!("Servo Sweep is Complete\n");
         if target == 0 {target = 180;}
         else {target = 0};
 
-        Timer::after_millis(5).await;
+        Timer::after_millis(10).await;
     }
 }
