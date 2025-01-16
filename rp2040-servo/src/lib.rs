@@ -14,8 +14,8 @@ use {
 };
 
 const DEFAULT_SERVO_FREQ: u32 = 50; //Hertz
-const DEFAULT_MIN_DUTY: u16 = 5; //us 
-const DEFAULT_MAX_DUTY: u16 = 10;  //us
+const DEFAULT_MIN_DUTY: u16 = 2100; //us 
+const DEFAULT_MAX_DUTY: u16 = 8200;  //us
 const DEFAULT_MAX_DEGREE_ROTATION: u16 = 180; //degree
 const DEFAULT_INITIAL_POSITION: u16 = 0; //degree
 
@@ -69,7 +69,7 @@ impl<'d> ServoBuilder<'d> {
 
     pub fn build(mut self) -> Servo<'d> {
         let clock_freq_hz = embassy_rp::clocks::clk_sys_freq();
-        let divider = 50u8;
+        let divider = 40u8;
         let period = (clock_freq_hz / (self.freq * divider as u32)) as u16 - 1;
         
         self.cfg.top = period;
